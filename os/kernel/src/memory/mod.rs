@@ -4,6 +4,7 @@ pub mod r#virtual;
 pub mod nvmem;
 
 pub mod cxl;
+mod messages;
 
 #[derive(Clone, Copy)]
 pub enum MemorySpace {
