@@ -5,6 +5,7 @@ pub mod nvmem;
 
 pub mod cxl;
 mod messages;
+mod test_capabilities;
 
 #[derive(Clone, Copy)]
 pub enum MemorySpace {
