@@ -1,5 +1,3 @@
-
-use bitflags::bitflags;
 use bitfield::*;
 
 
@@ -148,3 +146,8 @@ bitfield!{
     poison,_:24, 24;
     rsvd,_:39, 25;
 }
+
+
+//noch was für flits benötigt
+
+//noch was für almps benötigt
