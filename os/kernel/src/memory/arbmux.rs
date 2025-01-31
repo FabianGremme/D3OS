@@ -1,9 +1,17 @@
+use alloc::boxed::Box;
+use alloc::sync::Arc;
 use alloc::vec;
 use alloc::vec::Vec;
 use log::info;
 use pci_types::EndpointHeader;
 use spin::RwLock;
-use crate::device::arbmux::vlsm_state::{Active, L1_1, L1_2, L1_3, L1_4, Reset, SleepL2};
+use crate::device::ps2::Keyboard;
+use crate::interrupt::interrupt_dispatcher::InterruptVector;
+use crate::{apic, interrupt_dispatcher};
+use crate::interrupt::interrupt_handler::InterruptHandler;
+use crate::memory::arbmux::vlsm_state::{Active, L1_1, L1_2, L1_3, L1_4, Reset, SleepL2};
+use crate::memory::messages::*;
+
 
 #[derive(PartialEq, Eq, Clone)]
 enum vlsm_state{
@@ -30,6 +38,12 @@ pub struct arb_mux{
     connected_links:RwLock<Vec<vlsm>>,
     nr_connected_links:u16,
     combined_state_to_send:vlsm_state,
+    is_upstream:bool, //ggf werden daraus zwei Listen, welche alle arbs enthalten werden
+    //almps_todo:RwLock<Vec<almp<bool>>>,
+}
+
+struct arb_muxInterruptHandler {
+    arb_mux:Arc<arb_mux>,
 }
 
 
@@ -65,9 +79,11 @@ impl arb_mux {
         });
     }
 
-
-
-
+    //damit Interrupts von der Arb_Mux ausgeführt werden können.
+    pub fn plugin(arb_mux: Arc<arb_mux>) {
+        interrupt_dispatcher().assign(InterruptVector::ARB, Box::new(arb_muxInterruptHandler::new(Arc::clone(&arb_mux))));
+        apic().allow(InterruptVector::ARB);
+    }
 
 }
 //Funktion, welche überprüft, welche Wechsel erlaubt ist
@@ -75,5 +91,19 @@ impl vlsm{
     // hier müssen die Messages angebunden werden. Vielleicht noch anders impl
     pub fn try_state_change (new_state:vlsm_state) -> bool{
         return false;
+    }
+}
+
+impl arb_muxInterruptHandler {
+    pub fn new(arb_mux: Arc<arb_mux>) -> Self {
+        Self { arb_mux }
+    }
+}
+
+
+// Verhaltensweise bei einem Interrupt der arb_mux
+impl InterruptHandler for arb_muxInterruptHandler {
+    fn trigger(&self) {
+        info!("arb_mux hat einen Interrupt ausgelöst");
     }
 }

@@ -1,4 +1,4 @@
-use bitfield::bitfield;
+/*use bitfield::bitfield;
 
 
 // pcie dvsec for Test Capability
@@ -200,3 +200,5 @@ bitfield!{
     u16;
     event_count,_:63, 0;
 }
+
+ */

@@ -1,4 +1,5 @@
-use bitfield::*;
+use bitfield_struct::*;
+//use bitfiled::bitfield;
 
 
 
@@ -15,7 +16,7 @@ MemWr = 7,
 CLFlush = 8,
 CleanEvict = 9,
 }
-
+/*
 bitfield!{
     struct d2h_request(MSB0[usize]);          //msb0 ist die Bitwertigkeit
     u16;
@@ -134,20 +135,65 @@ bitfield!{
     tag,_:23, 8;
     rsvd,_:27, 24;
 }
+*/
+#[bitfield(u64)]
+pub struct s2m_data_response{
+    valid: bool,
 
-bitfield!{
-    struct s2m_data_response(MSB0[usize]);
-    u16;
-    valid,_:0, 0;
-    opcode,_:3, 1;
-    meta_field,_:5, 4;
-    meta_value,_:7, 6;
-    tag,_:23, 8;
-    poison,_:24, 24;
-    rsvd,_:39, 25;
+    #[bits(3)]
+    opcode: usize,
+
+    #[bits(2)]
+    meta_field: usize,
+
+    #[bits(2)]
+    meta_value: usize,
+
+    #[bits(16)]
+    tag: usize,
+
+    poison: bool,
+
+    #[bits(15)]
+    rsvd: usize,
+
+    #[bits(24)]
+    _padding: usize,
+
 }
+
 
 
 //noch was für flits benötigt
 
-//noch was für almps benötigt
+
+
+//Aufbau der ALMPS:
+//reserved: bleibt leer
+//message: value 00010000 damit es erkannt wird
+//message_specific_1: value 0 bis 15 = 00001111 rest ist reserved für status almp oder 128 bis 143 = 10001111 für request almp
+//message_specific_2: 0000 0001 für cxl.io und 0000 0010 für cxl.mem odercxl cache
+
+
+#[bitfield(u32)]
+pub struct almp{
+    #[bits(8)]
+    reserved: usize,
+
+    #[bits(8)]
+    message: usize,
+
+    #[bits(8)]
+    message_specific_1: usize,
+
+    #[bits(8)]
+    message_specific_2: usize,
+}
+
+impl almp{
+    pub fn create_almp_mock()->almp{
+        almp::new()
+            .with_message(0b00010000)
+    }
+}
+

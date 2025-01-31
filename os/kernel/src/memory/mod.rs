@@ -6,6 +6,7 @@ pub mod nvmem;
 pub mod cxl;
 mod messages;
 mod test_capabilities;
+mod arbmux;
 
 #[derive(Clone, Copy)]
 pub enum MemorySpace {
