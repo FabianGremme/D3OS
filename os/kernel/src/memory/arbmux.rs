@@ -107,3 +107,7 @@ impl InterruptHandler for arb_muxInterruptHandler {
         info!("arb_mux hat einen Interrupt ausgelöst");
     }
 }
+
+pub fn init(){
+
+}

@@ -7,6 +7,7 @@ pub mod cxl;
 mod messages;
 mod test_capabilities;
 mod arbmux;
+pub(crate) mod srat;
 
 #[derive(Clone, Copy)]
 pub enum MemorySpace {
