@@ -50,9 +50,11 @@ use crate::device::ps2::Keyboard;
 use crate::device::qemu_cfg;
 use crate::device::serial::SerialPort;
 use crate::memory::{cxl,MemorySpace, nvmem, PAGE_SIZE};
+use crate::memory::cxl::CEDT;
 use crate::memory::srat;
 use crate::memory::nvmem::Nfit;
 use crate::memory::r#virtual::page_table_index;
+use crate::memory::srat::SRAT;
 use crate::network::rtl8139;
 
 // import labels from linker script 'link.ld'
@@ -233,7 +235,7 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     if let Ok(nfit) = acpi_tables().lock().find_table::<Nfit>() {
         if let Some(range) = nfit.get_phys_addr_ranges().first() {
             let date_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut Time;
-
+            info!("--------- date ptr nvmm ist {:?}", date_ptr);
             // Read last boot time from NVRAM
             let date = unsafe { date_ptr.read() };
             if date.is_valid().is_ok() {
@@ -248,6 +250,53 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
             }
         }
     }
+
+    // As a demo for CXL support, we read the last boot time from NVRAM and write the current boot time to it
+    if let Ok(cedt) = acpi_tables().lock().find_table::<CEDT>() {
+        if let Some(range) = cedt.get_host_bridge_structures().first() {
+            let date2_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut Time;
+            info!("--------- date ptr cxl ist {:?}", date2_ptr);
+            // Read last boot time from NVRAM
+            let day = unsafe { date2_ptr.read() };
+            if day.is_valid().is_ok() {
+                info!("Last boot time from cxl: [{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}]", day.year(), day.month(), day.day(), day.hour(), day.minute(), day.second());
+            }else{
+                info!("cannot read pointer {:?}", day);
+            }
+
+            // Write current boot time to NVRAM
+            if efi_services_available() {
+                if let Ok(time2) = uefi::runtime::get_time() {
+                    info!("try to write time {:?}", time2);
+                    unsafe { date2_ptr.write(time2) }
+                    let test = unsafe { date2_ptr.read() };
+                    info!("after pointer write {:?}", test);
+                }
+            }
+        }
+    }
+
+
+    // As a demo for SRAT support, we read the last boot time from NVRAM and write the current boot time to it
+    /*if let Ok(srat) = acpi_tables().lock().find_table::<SRAT>() {
+        if let Some(memstruct) = srat.get_memory_structures().first() {
+            let count_ptr = memstruct.as_phys_frame_range().start.start_address().as_u64() as *mut u64;
+
+            // Read last boot time from SRAT Memory Structure
+            let mut count = unsafe { count_ptr.read() };
+            info!("das System wurde {} Mal gestartet", count);
+
+            // Write current boot time to NVRAM
+            if count > 100{
+                count = 0;
+            }else{
+                count += 1;
+            }
+            unsafe {count_ptr.write(count)}
+        }
+    }*/
+
+
 
     // Init naming service
     naming::api::init();

@@ -2,10 +2,16 @@ use alloc::vec::Vec;
 use core::ptr;
 use acpi::sdt::{SdtHeader, Signature};
 use log::info;
-use crate::acpi_tables;
+use crate::{acpi_tables, process_manager};
 use acpi::{AcpiTable};
+use x86_64::{PhysAddr, VirtAddr};
 use crate::device::pci::PciBus;
 use crate::memory::cxl::{CEDT, CEDTStructureHeader, CXLFixedMemoryWindowStructure, CXLHostBridgeStructure};
+use crate::memory::nvmem::SystemPhysicalAddressRange;
+use x86_64::structures::paging::frame::PhysFrameRange;
+use x86_64::structures::paging::{Page, PageTableFlags, PhysFrame};
+use x86_64::structures::paging::page::PageRange;
+use crate::memory::{MemorySpace, PAGE_SIZE};
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -176,6 +182,30 @@ impl SRAT {
 
         return tables;
     }
+
+
+    pub fn get_memory_structures (&self) -> Vec<&MemoryAffinityStructure> {
+        let mut structures = Vec::<&MemoryAffinityStructure>::new();
+
+        self.get_structures().iter().for_each(|structure| {
+            let structure_type = unsafe { ptr::from_ref(structure).read_unaligned().typ };
+            if structure_type == SratStructureType::MemoryAffinityStructure {
+                structures.push(structure.as_structure::<MemoryAffinityStructure>());
+            }
+        });
+
+        return structures;
+    }
+}
+
+impl MemoryAffinityStructure{
+    pub fn as_phys_frame_range(&self) -> PhysFrameRange {
+        let address:u64 = (self.base_addr_high as u64) << 32 | (self.base_addr_low as u64);
+        let length:u64 = (self.length_high as u64) << 32 | (self.length_low as u64);
+        let start = PhysFrame::from_start_address(PhysAddr::new(address)).expect("Invalid start address");
+
+        return PhysFrameRange { start, end: start + (length / PAGE_SIZE as u64) };
+    }
 }
 
 impl SratStructureHeader {
@@ -213,6 +243,23 @@ pub fn init() {
             }else{
                 info!("unknown structure");
             }
+
         }
+        // Given addr does not work properly
+        /*
+        // Search SRAT table for non-volatile memory ranges
+        for spa in srat.get_memory_structures() {
+            // Copy values to avoid unaligned access of packed struct fields
+            let address:u64 = (spa.base_addr_high as u64) << 32 | (spa.base_addr_low as u64);
+            let length:u64 = (spa.length_high as u64) << 32 | (spa.length_low as u64);
+            info!("Found non-volatile memory from srat (Address: [0x{:x}], Length: [{} MiB])", address, length / 1024 / 1024);
+
+            // Map non-volatile memory range to kernel address space
+            let start_page = Page::from_start_address(VirtAddr::new(address)).unwrap();
+            process_manager().read().kernel_process().expect("Failed to get kernel process")
+                .address_space()
+                .map(PageRange { start: start_page, end: start_page + (length / PAGE_SIZE as u64) }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE);
+        }
+        */
     }
 }
