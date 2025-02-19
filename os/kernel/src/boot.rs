@@ -254,25 +254,14 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     // As a demo for CXL support, we read the last boot time from NVRAM and write the current boot time to it
     if let Ok(cedt) = acpi_tables().lock().find_table::<CEDT>() {
         if let Some(range) = cedt.get_host_bridge_structures().first() {
-            let date2_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut Time;
-            info!("--------- date ptr cxl ist {:?}", date2_ptr);
+            let data_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut [u8;10000];
+            info!("--------- data ptr cxl ist {:?}", data_ptr);
             // Read last boot time from NVRAM
-            let day = unsafe { date2_ptr.read() };
-            if day.is_valid().is_ok() {
-                info!("Last boot time from cxl: [{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}]", day.year(), day.month(), day.day(), day.hour(), day.minute(), day.second());
-            }else{
-                info!("cannot read pointer {:?}", day);
-            }
+            let data = unsafe { data_ptr.read() };
+            info!("found data is: {:?}", data);
 
-            // Write current boot time to NVRAM
-            if efi_services_available() {
-                if let Ok(time2) = uefi::runtime::get_time() {
-                    info!("try to write time {:?}", time2);
-                    unsafe { date2_ptr.write(time2) }
-                    let test = unsafe { date2_ptr.read() };
-                    info!("after pointer write {:?}", test);
-                }
-            }
+
+
         }
     }
 

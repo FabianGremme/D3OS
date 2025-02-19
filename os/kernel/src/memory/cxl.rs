@@ -153,7 +153,7 @@ impl CEDT {
 
         self.get_structures().iter().for_each(|structure| {
             let structure_type = unsafe { ptr::from_ref(structure).read_unaligned().typ };
-            if structure_type == CEDTStructureType::CXLFixedMemoryWindowStructure {
+            if structure_type == CEDTStructureType::CXLHostBridgeStructure {
                 structures.push(structure.as_structure::<CXLHostBridgeStructure>());
             }
         });
@@ -189,8 +189,6 @@ impl CEDTStructureHeader {
         }
     }
 }
-
-
 
 
 pub fn init() {
