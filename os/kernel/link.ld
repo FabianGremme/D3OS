@@ -21,15 +21,22 @@ SECTIONS {
 
     .text :
     {
-        *(.text)
+        *(".text")
+        *(".text*")
     }
 
-   .bss : 
+   .bss :
     {
       ___BSS_START__ = .;
       *(".bss")
       *(".bss.*")
       ___BSS_END__ = .;
+    }
+
+    .data :
+    {
+      *(".data")
+      *(".data.*")
     }
 
     ___KERNEL_DATA_END__ = .;

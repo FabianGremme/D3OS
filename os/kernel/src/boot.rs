@@ -50,7 +50,7 @@ use crate::device::ps2::Keyboard;
 use crate::device::qemu_cfg;
 use crate::device::serial::SerialPort;
 use crate::memory::{cxl,MemorySpace, nvmem, PAGE_SIZE};
-use crate::memory::cxl::CEDT;
+use crate::memory::cxl::{CEDT, CXLHostBridgeComponentRegisterRanges};
 use crate::memory::srat;
 use crate::memory::nvmem::Nfit;
 use crate::memory::r#virtual::page_table_index;
@@ -111,19 +111,30 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     if let Some(serial) = serial_port() {
         logger().register(serial);
     }
+    info!("nach serial");
+
+
+
 
     // Map the framebuffer, needed for text output of the terminal
     let fb_info = multiboot.framebuffer_tag()
         .expect("No framebuffer information provided by bootloader!")
         .expect("Unknown framebuffer type!");
     let fb_start_page = Page::from_start_address(VirtAddr::new(fb_info.address())).expect("Framebuffer address is not page aligned");
+    info!("nach serial");
     let fb_end_page = Page::from_start_address(VirtAddr::new(fb_info.address() + (fb_info.height() * fb_info.pitch()) as u64).align_up(PAGE_SIZE as u64)).unwrap();
+    info!("nach serial");
     kernel_process.address_space().map(PageRange { start: fb_start_page, end: fb_end_page }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE);
 
     // Initialize terminal and enable terminal logging
+
+    info!("terminal geht über address {:?} mit pitch {:?} width {:?} height{:?} bpp {:?}", fb_info.address() as *mut u8, fb_info.pitch(), fb_info.width(), fb_info.height(), fb_info.bpp());
     init_terminal(fb_info.address() as *mut u8, fb_info.pitch(), fb_info.width(), fb_info.height(), fb_info.bpp());
+    info!("nach serial");
     logger().register(terminal());
- 
+    info!("nach serial");
+
+
     // Dumping basic infos
     info!("Welcome to D3OS!");
     let version = format!("v{} ({} - O{})", built_info::PKG_VERSION, built_info::PROFILE, built_info::OPT_LEVEL);
@@ -162,6 +173,8 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     info!("Initializing APIC");
     init_apic();
 
+
+
     // Initialize timer
     info!("Initializing timer");
     let timer = timer();
@@ -196,8 +209,9 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
         SerialPort::plugin(serial);
     }
 
+
     // Scan PCI bus
-    info!("Scanning PCI bus");
+    println!("Scanning PCI bus");
     init_pci();
 
     // Initialize network stack
@@ -231,6 +245,22 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     //init srat
     srat::init();
 
+    // As a demo for CXL support, we read the last boot time from NVRAM and write the current boot time to it
+    if let Ok(cedt) = acpi_tables().lock().find_table::<CEDT>() {
+        if let Some(range) = cedt.get_host_bridge_structures().first() {
+            let data_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut CXLHostBridgeComponentRegisterRanges;       //20456  das ist die höchste Addr die geht
+            info!("datapointer ist {:?}", data_ptr);
+
+            // Read last boot time from NVRAM
+            let data = unsafe { data_ptr.read() };
+            // auf das array kann nicht zugegriffen werden
+            //info!("found data is: {:?}", data);
+        }
+    }
+
+
+
+
     // As a demo for NVRAM support, we read the last boot time from NVRAM and write the current boot time to it
     if let Ok(nfit) = acpi_tables().lock().find_table::<Nfit>() {
         if let Some(range) = nfit.get_phys_addr_ranges().first() {
@@ -251,19 +281,33 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
         }
     }
 
-    // As a demo for CXL support, we read the last boot time from NVRAM and write the current boot time to it
-    if let Ok(cedt) = acpi_tables().lock().find_table::<CEDT>() {
-        if let Some(range) = cedt.get_host_bridge_structures().first() {
-            let data_ptr = range.as_phys_frame_range().start.start_address().as_u64() as *mut [u8;10000];
-            info!("--------- data ptr cxl ist {:?}", data_ptr);
+
+    // As a demo for cxl support using a hardcoded addr we found in the system using info pci, we read the last boot time from NVRAM and write the current boot time to it
+
+
+    /*let date_ptr3 = 0x81800000 as *mut Time;
+    info!("--------- date ptr cxl_hardcoded ist {:?}", date_ptr3);
             // Read last boot time from NVRAM
-            let data = unsafe { data_ptr.read() };
-            info!("found data is: {:?}", data);
-
-
-
-        }
+    let date = unsafe { date_ptr3.read() };
+    if date.is_valid().is_ok() {
+        info!("Last boot time hardcoced: [{:0>4}-{:0>2}-{:0>2} {:0>2}:{:0>2}:{:0>2}]", date.year(), date.month(), date.day(), date.hour(), date.minute(), date.second());
+    }else{
+        info!("hardcoded time not found");
     }
+
+
+    if efi_services_available() {
+        if let Ok(time) = uefi::runtime::get_time() {
+            unsafe {
+                info!("current time is {:?}", time);
+                date_ptr3.write(time);
+                let written = date_ptr3.read();
+                info!("wrote time {:?}", written);
+            }
+        }
+    }*/
+
+
 
 
     // As a demo for SRAT support, we read the last boot time from NVRAM and write the current boot time to it

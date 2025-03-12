@@ -106,7 +106,7 @@ pub struct CXLSystemDescriptionStructure{
     reserved_2: u16,
 }
 
-/*#[repr(C, packed)]
+#[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
 pub struct CXLHostBridgeComponentRegisterRanges{
     cxlio_registers: [u8; 4000],
@@ -114,7 +114,7 @@ pub struct CXLHostBridgeComponentRegisterRanges{
     cxlcachemem_extended: [u8;48000],
     arb_mux_registers: [u8;1000],
     reserved: [u8;7000],
-}*/
+}
 
 unsafe impl AcpiTable for CEDT {
     const SIGNATURE: Signature = Signature::CEDT;
@@ -229,20 +229,35 @@ pub fn init() {
             }
         }
 
-        // Search NFIT table for non-volatile memory ranges
+        // Search CEDT table for non-volatile memory ranges
         for spa in cedt.get_host_bridge_structures() {
             // Copy values to avoid unaligned access of packed struct fields
             let address:u64 = spa.base;
             let length:u64 = spa.length;
-            info!("Found non-volatile memory from cedt (Address: [0x{:x}], Length: [{} MiB])", address, length / 1024 / 1024);
+            info!("Found non-volatile memory from cedt1 (Address: [0x{:x}], Length: [{} KB])", address, length/1024);
+            info!("mapping von length/PAGE_Size ist {:?}", length / PAGE_SIZE as u64); // da wir 4kb Pages haben, werden 16 Pages alloziiert
 
             // Map non-volatile memory range to kernel address space
             let start_page = Page::from_start_address(VirtAddr::new(address)).unwrap();
+            info!("page range ist {:?}", PageRange { start: start_page, end: start_page + (length / PAGE_SIZE as u64)});
             process_manager().read().kernel_process().expect("Failed to get kernel process")
                 .address_space()
                 .map(PageRange { start: start_page, end: start_page + (length / PAGE_SIZE as u64) }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE);
+
+            // per host bridge there is a control register space. this is the address space that was mapped before
+            //now some bits are beeing set
+            
         }
 
+        // hier wird eine hardcoded adresse eingemappt
+        /*let hardcoded_add: u64 = 0x81800000;
+        let hardcoded_len: u64 = 2097151;
+        info!("Found non-volatile memory from cedt2 (Address: [0x{:x}], Length: [{} MiB])", hardcoded_add, hardcoded_len / 1024 / 1024);
+        let start_page = Page::from_start_address(VirtAddr::new(hardcoded_add)).unwrap();
+        process_manager().read().kernel_process().expect("Failed to get kernel process")
+            .address_space()
+            .map(PageRange { start: start_page, end: start_page + (hardcoded_len / PAGE_SIZE as u64) }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE);
 
+        */
     }
 }
