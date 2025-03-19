@@ -245,6 +245,8 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
     //init srat
     srat::init();
 
+
+
     // As a demo for CXL support, we read the last boot time from NVRAM and write the current boot time to it
     if let Ok(cedt) = acpi_tables().lock().find_table::<CEDT>() {
         if let Some(range) = cedt.get_host_bridge_structures().first() {
@@ -254,10 +256,9 @@ pub extern "C" fn start(multiboot2_magic: u32, multiboot2_addr: *const BootInfor
             // Read last boot time from NVRAM
             let data = unsafe { data_ptr.read() };
             // auf das array kann nicht zugegriffen werden
-            //info!("found data is: {:?}", data);
+            info!("found data is: {:?}", data);
         }
     }
-
 
 
 

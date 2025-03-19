@@ -100,13 +100,6 @@ args = [
     "-device", "nvdimm,memdev=mem1,id=nv1,label-size=2M",
     "-object", "memory-backend-file,id=mem1,share=on,mem-path=nvdimm0,size=16M",
 
-    # Network configuration
-    "-nic", "model=rtl8139,id=rtl8139,hostfwd=udp::1797-:1797",
-    "-object", "filter-dump,id=filter1,netdev=rtl8139,file=rtl8139.dump",
-
-    # Audio configuration (Using pulse audio for Linux)
-    "-audiodev", "id=audio0,driver=pa",
-
     #hier kommen die neuen cxl geräte rein:
     "-object", "memory-backend-file,id=cxl-mem1,share=on,mem-path=/tmp/cxltest.raw,size=256M",
     "-object", "memory-backend-file,id=cxl-mem2,share=on,mem-path=/tmp/cxltest2.raw,size=256M",
@@ -117,16 +110,25 @@ args = [
     "-object", "memory-backend-file,id=cxl-lsa3,share=on,mem-path=/tmp/lsa3.raw,size=256M",
     "-object", "memory-backend-file,id=cxl-lsa4,share=on,mem-path=/tmp/lsa4.raw,size=256M",
     "-device", "pxb-cxl,bus_nr=12,bus=pcie.0,id=cxl.1",
-    "-device", "pxb-cxl,bus_nr=122,bus=pcie.0,id=cxl.2",
+    "-device", "pxb-cxl,bus_nr=222,bus=pcie.0,id=cxl.2",
     "-device", "cxl-rp,port=0,bus=cxl.1,id=root_port13,chassis=0,slot=2",
-    "-device", "cxl-type3,bus=root_port13,persistent-memdev=cxl-mem1,lsa=cxl-lsa1,id=cxl-pmem0",
+    "-device", "cxl-type3,bus=root_port13,memdev=cxl-mem1,lsa=cxl-lsa1,id=cxl-pmem0",
     "-device", "cxl-rp,port=1,bus=cxl.1,id=root_port14,chassis=0,slot=3",
-    "-device", "cxl-type3,bus=root_port14,persistent-memdev=cxl-mem2,lsa=cxl-lsa2,id=cxl-pmem1",
+    "-device", "cxl-type3,bus=root_port14,memdev=cxl-mem2,lsa=cxl-lsa2,id=cxl-pmem1",
     "-device", "cxl-rp,port=0,bus=cxl.2,id=root_port15,chassis=0,slot=5",
-    "-device", "cxl-type3,bus=root_port15,persistent-memdev=cxl-mem3,lsa=cxl-lsa3,id=cxl-pmem2",
+    "-device", "cxl-type3,bus=root_port15,memdev=cxl-mem3,lsa=cxl-lsa3,id=cxl-pmem2",
     "-device", "cxl-rp,port=1,bus=cxl.2,id=root_port16,chassis=0,slot=6",
-    "-device", "cxl-type3,bus=root_port16,persistent-memdev=cxl-mem4,lsa=cxl-lsa4,id=cxl-pmem3",
-    "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.targets.1=cxl.2,cxl-fmw.0.size=4G,cxl-fmw.0.interleave-granularity=8k"
+    "-device", "cxl-type3,bus=root_port16,memdev=cxl-mem4,lsa=cxl-lsa4,id=cxl-pmem3",
+    "-M", "cxl-fmw.0.targets.0=cxl.1,cxl-fmw.0.targets.1=cxl.2,cxl-fmw.0.size=4G,cxl-fmw.0.interleave-granularity=8k",
+
+    # Network configuration
+    "-nic", "model=rtl8139,id=rtl8139,hostfwd=udp::1797-:1797",
+    "-object", "filter-dump,id=filter1,netdev=rtl8139,file=rtl8139.dump",
+
+    # Audio configuration (Using pulse audio for Linux)
+    "-audiodev", "id=audio0,driver=pa",
+
+
 ]
 
 [tasks.qemu.mac]

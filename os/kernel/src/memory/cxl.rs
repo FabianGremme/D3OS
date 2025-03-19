@@ -249,15 +249,15 @@ pub fn init() {
             
         }
 
+        /*
         // hier wird eine hardcoded adresse eingemappt
-        /*let hardcoded_add: u64 = 0x81800000;
+        let hardcoded_add: u64 = 0x81800000;
         let hardcoded_len: u64 = 2097151;
         info!("Found non-volatile memory from cedt2 (Address: [0x{:x}], Length: [{} MiB])", hardcoded_add, hardcoded_len / 1024 / 1024);
         let start_page = Page::from_start_address(VirtAddr::new(hardcoded_add)).unwrap();
         process_manager().read().kernel_process().expect("Failed to get kernel process")
             .address_space()
             .map(PageRange { start: start_page, end: start_page + (hardcoded_len / PAGE_SIZE as u64) }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE);
-
         */
-    }
+       }
 }
