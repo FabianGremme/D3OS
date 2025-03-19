@@ -12,7 +12,7 @@ use x86_64::{PhysAddr, VirtAddr};
 use crate::{acpi_tables, pci_bus, process_manager};
 use crate::device::pci::PciBus;
 use crate::memory::srat::MemoryAffinityStructure;
-
+use crate::memory::vmm::VmaType;
 
 pub fn print_bus_devices(){
     pci_bus().dump_devices();
@@ -241,8 +241,17 @@ pub fn init() {
             let start_page = Page::from_start_address(VirtAddr::new(address)).unwrap();
             info!("page range ist {:?}", PageRange { start: start_page, end: start_page + (length / PAGE_SIZE as u64)});
             process_manager().read().kernel_process().expect("Failed to get kernel process")
-                .address_space()
-                .map(PageRange { start: start_page, end: start_page + (length / PAGE_SIZE as u64) }, MemorySpace::Kernel, PageTableFlags::PRESENT | PageTableFlags::WRITABLE);
+                .virtual_address_space
+                .map(
+                    PageRange {
+                        start: start_page,
+                        end: start_page + (length / PAGE_SIZE as u64),
+                    },
+                    MemorySpace::Kernel,
+                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                    VmaType::DeviceMemory,
+                    "cxl",
+                );
 
             // per host bridge there is a control register space. this is the address space that was mapped before
             //now some bits are beeing set
