@@ -7,6 +7,7 @@ pub mod nvmem;
 pub mod kheap;
 pub mod kstack;
 pub mod acpi_handler;
+pub mod ahciController;
 
 #[derive(Clone, Copy)]
 pub enum MemorySpace {
