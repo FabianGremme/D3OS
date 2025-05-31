@@ -18,6 +18,7 @@ const SATA_CONTROLLER: SubClass = 0x06;
 
 struct AhciController{
     hba_regs: HBARegister,
+    first_port_regs: HbaPort,
 }
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +37,31 @@ struct HBARegister{
      reserved: [u8;116],
      vendorSpecific: [u8;96],
 }
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+struct HbaPort {
+     commandListBaseAddress: u32,
+     commandListBaseAddressUpper: u32,
+     fisBaseAddress: u32,
+     fisBaseAddressUpper: u32,
+     interruptStatus: u32,
+     interruptEnable: u32,
+     command: u32,
+     reserved1: u32,
+     taskFileData: u32,
+    DeviceSignature_signature: u32,
+     sataStatus: u32,
+     sataControl: u32,
+     sataError: u32,
+     sataActive: u32,
+     commandIssue: u32,
+     sataNotification: u32,
+     fisBasedSwitchControl: u32,
+     deviceSleep: u32,
+     reserved2: [u32;10],
+     vendorSpecific: [u32;4],
+
+}
 
 pub fn init(){
     info!("searching the bus for mass storage devices that use sata");
@@ -45,7 +71,11 @@ pub fn init(){
     unsafe {
         let ahciController = Arc::new(AhciController::new(device));
         info!("der ahci controller hat die folgenden Felder: {:?}", ahciController.hba_regs);
+        info!("der ahci controller hat den ersten Port: {:?}", ahciController.first_port_regs);
     }
+
+
+
 
 
     /*for device in found_devices {
@@ -124,7 +154,48 @@ impl AhciController {
         //let capabilities = cap.read();
         info!("cap = {:?}, ghc = {:?}, is = {:?}, pi = {:?}, vs = {:?}", cap.read(), ghc.read(), is.read(), pi.read(), vs.read());
 
-        Self{ hba_regs: HBARegister {
+        // hier müssten die ersten Folder für die Ports sein
+        // hier werden alle Register vom ersten Port abgelaufen
+        let mut port_offset = 256 as isize;
+        let clb = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let clbu = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let fis_ba = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let fis_bau = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let istat = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let ie = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let cmd = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let res1 = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let tfd = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sig = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sata_stat = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sata_ctrl = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sata_err = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sata_act = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let cmd_issue = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let sata_not = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let fis_bsc = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+        let dev_sleep = ahci_base_addr.offset(port_offset) as *mut u32;
+        port_offset += 4;
+
+        Self{
+            hba_regs: HBARegister {
             hostCapabilities: cap.read(),
             globalHostControl: ghc.read(),
             interruptStatus: is.read(),
@@ -138,7 +209,34 @@ impl AhciController {
             biosHandoffControl: bhc.read(),
             reserved: [0;116],
             vendorSpecific: [0;96],
-        } }
+            },
+            first_port_regs:HbaPort{
+                commandListBaseAddress: clb.read(),
+                commandListBaseAddressUpper: clbu.read(),
+                fisBaseAddress: fis_ba.read(),
+                fisBaseAddressUpper: fis_bau.read(),
+                interruptStatus: istat.read(),
+                interruptEnable: ie.read(),
+                command: cmd.read(),
+                reserved1: res1.read(),
+                taskFileData: tfd.read(),
+                DeviceSignature_signature: sig.read(),
+                sataStatus: sata_stat.read(),
+                sataControl: sata_ctrl.read(),
+                sataError: sata_err.read(),
+                sataActive: sata_act.read(),
+                commandIssue: cmd_issue.read(),
+                sataNotification: sata_not.read(),
+                fisBasedSwitchControl: fis_bsc.read(),
+                deviceSleep: dev_sleep.read(),
+                reserved2: [0;10],
+                vendorSpecific: [0;4],
+            }
+
+
+        }
+
+
     }
 }
 
