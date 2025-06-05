@@ -1,4 +1,6 @@
 use alloc::sync::Arc;
+use alloc::vec;
+use alloc::vec::Vec;
 use core::any::Any;
 use log::info;
 use pci_types::{BaseClass, EndpointHeader, SubClass};
@@ -9,6 +11,7 @@ use x86_64::VirtAddr;
 use crate::device::ide::IdeDrive;
 use crate::{pci_bus, process_manager};
 use crate::memory::{MemorySpace, PAGE_SIZE};
+use crate::memory::nvmem::NfitStructureHeader;
 use crate::memory::vmm::VmaType;
 use crate::storage::add_block_device;
 
@@ -18,7 +21,7 @@ const SATA_CONTROLLER: SubClass = 0x06;
 
 struct AhciController{
     hba_regs: HBARegister,
-    first_port_regs: HbaPort,
+    ports: Vec<HbaPort>,
 }
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy)]
@@ -49,7 +52,7 @@ struct HbaPort {
      command: u32,
      reserved1: u32,
      taskFileData: u32,
-    DeviceSignature_signature: u32,
+     DeviceSignature_signature: u32,
      sataStatus: u32,
      sataControl: u32,
      sataError: u32,
@@ -69,74 +72,19 @@ pub fn init(){
     info!("habe die folgenden Geräte gefunden {:?}", found_devices.len());
     let mut device = found_devices.pop().unwrap();
     unsafe {
-        let ahciController = Arc::new(AhciController::new(device));
-        info!("der ahci controller hat die folgenden Felder: {:?}", ahciController.hba_regs);
-        info!("der ahci controller hat den ersten Port: {:?}", ahciController.first_port_regs);
+        let mut ahci_controller = Arc::new(AhciController::new(device));
+        info!("der ahci controller hat die hba: {:?}", ahci_controller.hba_regs);
+        ahci_controller.check_ports_for_device();
     }
 
 
 
-
-
-    /*for device in found_devices {
-        let device_id = device.read().header().id(&pci_bus().config_space());
-        info!("Found IDE controller [{}:{}]", device_id.0, device_id.1);
-
-        let ide_controller = Arc::new(crate::device::ide::IdeController::new(device));
-        crate::device::ide::IdeController::plugin(Arc::clone(&ide_controller));
-
-        let found_drives = ide_controller.init_drives();
-        for drive in found_drives.iter() {
-            let block_device = Arc::new(IdeDrive::new(Arc::clone(&ide_controller), *drive));
-            add_block_device("ata", block_device);
-        }
-    }*/
     //die GHCR sind in Section 3 der Spezifikation zu finden. ich weiß noch nicht, wie man bis dahin kommt
 }
 
 impl AhciController {
-    unsafe fn new(device: &RwLock<EndpointHeader>) -> Self {
-        let device_header = device.read();
 
-        // bei base address register (bar5) stehen die wichtigen Daten für die pci capabilities, register, etc.
-        let bar5 = device_header.bar(5,&pci_bus().config_space());
-        // bei bar4 findet sich ein io port
-        let bar4 = device_header.bar(4,&pci_bus().config_space());
-        info!("bar with slot one has the following info: {:?}", bar5);
-        let bar_io = bar4.unwrap().unwrap_io();
-        let bar_mem = bar5.unwrap().unwrap_mem();
-        info!("bar io is {:?} and bar mem is {:?}", bar_io, bar_mem);
-
-        //map the memory where the control registers are located
-        let address = bar_mem.0 as u64;
-        let length = bar_mem.1 as u64;
-        info!(
-                "(Address: [0x{:x}], Length: [{} B])",
-                address,
-                length
-            );
-
-        // Map non-volatile memory range to kernel address space
-        let start_page = Page::from_start_address(VirtAddr::new(address)).unwrap();
-        process_manager()
-            .read()
-            .kernel_process()
-            .expect("Failed to get kernel process")
-            .virtual_address_space
-            .map(
-                PageRange {
-                    start: start_page,
-                    end: start_page + (length / PAGE_SIZE as u64),
-                },
-                MemorySpace::Kernel,
-                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-                VmaType::DeviceMemory,
-                "ahci",
-            );
-
-
-
-        let ahci_base_addr = bar_mem.0 as *mut u8;;
+    unsafe fn fill_hba_reg(ahci_base_addr: *mut u8) -> HBARegister{
         let cap = ahci_base_addr as *mut u32;
         let ghc = ahci_base_addr.offset(4 as isize) as *mut u32;
         let is = ahci_base_addr.offset(8 as isize) as *mut u32;
@@ -149,14 +97,41 @@ impl AhciController {
         let emc = ahci_base_addr.offset(32 as isize) as *mut u32;
         let ehc = ahci_base_addr.offset(36 as isize) as *mut u32;
         let bhc = ahci_base_addr.offset(40 as isize) as *mut u32;
+        HBARegister {
+            hostCapabilities: cap.read(),
+            globalHostControl: ghc.read(),
+            interruptStatus: is.read(),
+            portsImplemented: pi.read(),
+            version: vs.read(),
+            commandCompletionCoalescingControl: cccc.read(),
+            commandCompletionCoalescingPorts: cccp.read(),
+            enclosureManagementLocation: eml.read(),
+            enclosureManagementControlu: emc.read(),
+            extendedHostCapabilities: ehc.read(),
+            biosHandoffControl: bhc.read(),
+            reserved: [0;116],
+            vendorSpecific: [0;96],
+        }
+    }
 
-        // hier komme ich auf komische Ergebnisse
-        //let capabilities = cap.read();
-        info!("cap = {:?}, ghc = {:?}, is = {:?}, pi = {:?}, vs = {:?}", cap.read(), ghc.read(), is.read(), pi.read(), vs.read());
+    unsafe fn init_ports(ahci_base_addr: *mut u8, hba_ports: u32) ->Vec<HbaPort>{
+        //aus der hba ports variable muss erst mal die Anzahl der Ports bestimmt werden. Dazu muss die Anzahl der 1 in der Binaerform gezaehlt werden.
+        let mut port_nr = 0;
+        let mut calc = hba_ports;
+        while calc != 0{
+            calc = calc & (calc -1);
+            port_nr += 1;
+        }
+        info!("port anzahl = {:?}", port_nr);
+        let mut output : Vec<HbaPort> = Vec::<HbaPort>::new();
+        for i in 0..port_nr{
+            output.push(Self::fill_port(ahci_base_addr,i));
+        }
+        output
+    }
 
-        // hier müssten die ersten Folder für die Ports sein
-        // hier werden alle Register vom ersten Port abgelaufen
-        let mut port_offset = 256 as isize;
+    unsafe fn fill_port(ahci_base_addr: *mut u8, nr_of_port: u64) -> HbaPort{
+        let mut port_offset = (256 + (nr_of_port * 128))  as isize;
         let clb = ahci_base_addr.offset(port_offset) as *mut u32;
         port_offset += 4;
         let clbu = ahci_base_addr.offset(port_offset) as *mut u32;
@@ -193,50 +168,91 @@ impl AhciController {
         port_offset += 4;
         let dev_sleep = ahci_base_addr.offset(port_offset) as *mut u32;
         port_offset += 4;
+        let output = HbaPort{
+            commandListBaseAddress: clb.read(),
+            commandListBaseAddressUpper: clbu.read(),
+            fisBaseAddress: fis_ba.read(),
+            fisBaseAddressUpper: fis_bau.read(),
+            interruptStatus: istat.read(),
+            interruptEnable: ie.read(),
+            command: cmd.read(),
+            reserved1: res1.read(),
+            taskFileData: tfd.read(),
+            DeviceSignature_signature: sig.read(),
+            sataStatus: sata_stat.read(),
+            sataControl: sata_ctrl.read(),
+            sataError: sata_err.read(),
+            sataActive: sata_act.read(),
+            commandIssue: cmd_issue.read(),
+            sataNotification: sata_not.read(),
+            fisBasedSwitchControl: fis_bsc.read(),
+            deviceSleep: dev_sleep.read(),
+            reserved2: [0;10],
+            vendorSpecific: [0;4],
+        };
+        info!("bearbeite Port Nr {:?} mit den Feldern {:?}", nr_of_port, output);
+        output
+    }
+
+    unsafe fn new(device: &RwLock<EndpointHeader>) -> Self {
+        let device_header = device.read();
+
+        // bei base address register (bar5) stehen die wichtigen Daten für die pci capabilities, register, etc.
+        let bar5 = device_header.bar(5,&pci_bus().config_space());
+        // bei bar4 findet sich ein io port
+        let bar4 = device_header.bar(4,&pci_bus().config_space());
+        info!("bar with slot one has the following info: {:?}", bar5);
+        let bar_io = bar4.unwrap().unwrap_io();
+        let bar_mem = bar5.unwrap().unwrap_mem();
+        info!("bar io is {:?} and bar mem is {:?}", bar_io, bar_mem);
+
+        let ahci_base_addr = bar_mem.0 as *mut u8;
+
+        //map the memory where the control registers are located
+        let address = bar_mem.0 as u64;
+        let length = bar_mem.1 as u64;
+        info!(
+                "(Address: [0x{:x}], Length: [{} B])",
+                address,
+                length
+            );
+
+        // Map non-volatile memory range to kernel address space
+        let start_page = Page::from_start_address(VirtAddr::new(address)).unwrap();
+        process_manager()
+            .read()
+            .kernel_process()
+            .expect("Failed to get kernel process")
+            .virtual_address_space
+            .map(
+                PageRange {
+                    start: start_page,
+                    end: start_page + (length / PAGE_SIZE as u64),
+                },
+                MemorySpace::Kernel,
+                PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                VmaType::DeviceMemory,
+                "ahci",
+            );
+        let hba = Self::fill_hba_reg(ahci_base_addr);
 
         Self{
-            hba_regs: HBARegister {
-            hostCapabilities: cap.read(),
-            globalHostControl: ghc.read(),
-            interruptStatus: is.read(),
-            portsImplemented: pi.read(),
-            version: vs.read(),
-            commandCompletionCoalescingControl: cccc.read(),
-            commandCompletionCoalescingPorts: cccp.read(),
-            enclosureManagementLocation: eml.read(),
-            enclosureManagementControlu: emc.read(),
-            extendedHostCapabilities: ehc.read(),
-            biosHandoffControl: bhc.read(),
-            reserved: [0;116],
-            vendorSpecific: [0;96],
-            },
-            first_port_regs:HbaPort{
-                commandListBaseAddress: clb.read(),
-                commandListBaseAddressUpper: clbu.read(),
-                fisBaseAddress: fis_ba.read(),
-                fisBaseAddressUpper: fis_bau.read(),
-                interruptStatus: istat.read(),
-                interruptEnable: ie.read(),
-                command: cmd.read(),
-                reserved1: res1.read(),
-                taskFileData: tfd.read(),
-                DeviceSignature_signature: sig.read(),
-                sataStatus: sata_stat.read(),
-                sataControl: sata_ctrl.read(),
-                sataError: sata_err.read(),
-                sataActive: sata_act.read(),
-                commandIssue: cmd_issue.read(),
-                sataNotification: sata_not.read(),
-                fisBasedSwitchControl: fis_bsc.read(),
-                deviceSleep: dev_sleep.read(),
-                reserved2: [0;10],
-                vendorSpecific: [0;4],
-            }
-
-
+            hba_regs: hba,
+            ports:Self::init_ports(ahci_base_addr,hba.portsImplemented)
         }
 
+        // Todo:
+        //bios Handoff implementieren
+        // schauen, ob der ahci modus aktiviert ist
 
+
+    }
+
+    pub fn check_ports_for_device(& self){
+        for current_port in &self.ports{
+            let ssts = current_port.sataStatus;
+            info!("der Port hat den Status {:?}", ssts);
+        }
     }
 }
 
