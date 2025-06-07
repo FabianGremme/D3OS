@@ -75,6 +75,8 @@ pub fn init(){
         let mut ahci_controller = Arc::new(AhciController::new(device));
         info!("der ahci controller hat die hba: {:?}", ahci_controller.hba_regs);
         ahci_controller.check_ports_for_device();
+        ahci_controller.check_ahci_mode_enabled();
+        ahci_controller.check_only_ahci();
     }
 
 
@@ -252,6 +254,26 @@ impl AhciController {
         for current_port in &self.ports{
             let ssts = current_port.sataStatus;
             info!("der Port hat den Status {:?}", ssts);
+        }
+    }
+
+    pub fn check_ahci_mode_enabled(&self){
+        let ghc = self.hba_regs.globalHostControl;
+        let help = 1 <<31;
+        if ghc & help != 0{
+            info!("der Controller läuft im ahci modus");
+        }else{
+            info!("der Controller läuft nicht im ahci modus");
+        }
+    }
+
+    pub fn check_only_ahci(&self){
+        let sam = self.hba_regs.hostCapabilities;
+        let help = 1 <<18;
+        if sam & help != 0{
+            info!("der Controller unterstützt nur ahci");
+        }else{
+            info!("der Controller unterstützt nicht nur ahci");
         }
     }
 }
