@@ -18,6 +18,14 @@ use crate::storage::add_block_device;
 const MASS_STORAGE_DEVICE: BaseClass = 0x01;
 const SATA_CONTROLLER: SubClass = 0x06;
 
+enum BiosHandoffFlags {
+    BIOS_OWNED_SEMAPHORE = 1 << 0,
+    OS_OWNED_SEMAPHORE = 1 << 1,
+    SMI_ON_OWNERSHIP_CHANGE = 1 << 2,
+    OS_OWNERSHIP_CHANGE = 1 << 3,
+    BIOS_BUSY = 1 << 4
+}
+
 
 struct AhciController{
     hba_regs: HBARegister,
@@ -52,7 +60,7 @@ struct HbaPort {
      command: u32,
      reserved1: u32,
      taskFileData: u32,
-     DeviceSignature_signature: u32,
+     signature: u32,
      sataStatus: u32,
      sataControl: u32,
      sataError: u32,
@@ -74,6 +82,7 @@ pub fn init(){
     unsafe {
         let mut ahci_controller = Arc::new(AhciController::new(device));
         info!("der ahci controller hat die hba: {:?}", ahci_controller.hba_regs);
+        ahci_controller.check_bios_handoff();
         ahci_controller.check_ports_for_device();
         ahci_controller.check_ahci_mode_enabled();
         ahci_controller.check_only_ahci();
@@ -180,7 +189,7 @@ impl AhciController {
             command: cmd.read(),
             reserved1: res1.read(),
             taskFileData: tfd.read(),
-            DeviceSignature_signature: sig.read(),
+            signature: sig.read(),
             sataStatus: sata_stat.read(),
             sataControl: sata_ctrl.read(),
             sataError: sata_err.read(),
@@ -245,7 +254,6 @@ impl AhciController {
 
         // Todo:
         //bios Handoff implementieren
-        // schauen, ob der ahci modus aktiviert ist
 
 
     }
@@ -253,7 +261,19 @@ impl AhciController {
     pub fn check_ports_for_device(& self){
         for current_port in &self.ports{
             let ssts = current_port.sataStatus;
-            info!("der Port hat den Status {:?}", ssts);
+            let ipm = (ssts >> 8) & 0x0F;
+            let det = ssts & 0x0F;
+
+            if ipm != 0x01 {    //0x01 means that the interface of the device is active. only then the device can be accessed
+                info!("ERR: interface is not active");
+                return;
+            }
+            if det != 0x03 {    //0x03 means that the device is detected and a physical communication is established
+                info!("ERR: device is not detected, or physical communication not established");
+                return;
+            }
+            let signature = current_port.signature;
+            info!("the device signature is {}", signature);
         }
     }
 
@@ -275,6 +295,26 @@ impl AhciController {
         }else{
             info!("der Controller unterstützt nicht nur ahci");
         }
+    }
+
+    pub fn check_bios_handoff(&self){
+        //check if the version is high enough
+        if self.hba_regs.version >= 0x10200{
+            info!("Version ist hoch genug");
+            let ext_cap = self.hba_regs.extendedHostCapabilities;
+            info!("ext_cap sind {}", ext_cap);
+            if ext_cap & 1 != 0{
+                info!("BIOS Handoff wird vom Controller unterstützt")
+            }
+        }else{
+            info!("Version ist nicht hoch genug")
+        }
+        let handoff = self.hba_regs.biosHandoffControl;
+        if handoff == 0{
+            info!("the bios has no control over the hba, so the os can use it");
+        }
+
+
     }
 }
 
