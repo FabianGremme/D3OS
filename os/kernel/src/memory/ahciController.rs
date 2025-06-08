@@ -114,6 +114,14 @@ pub fn init(){
         ahci_controller.check_ports_for_device();
         ahci_controller.check_ahci_mode_enabled();
         ahci_controller.check_only_ahci();
+        ahci_controller.check_64_bit_addr_supported();
+        ahci_controller.check_cap_nr_of_ports();
+        ahci_controller.check_nr_of_command_slots();
+
+        //info!("teste die Funktion um mehrere Bitfelder auszulesen");
+        //let testoutput = ahci_controller.general_bitlen_reader(57105, 7, 5); // hier sollte 30 rauskommen, das passt
+        //info!("testoutput ist {}", testoutput);
+
     }
 
 
@@ -288,6 +296,14 @@ impl AhciController {
         return register & mask != 0;
     }
 
+    pub fn general_bitlen_reader(register: u32, bit_position: u8, len: u8)-> u32{
+        let mut mask = 1<<bit_position;
+        for i in 0..len{
+            mask = mask | 1<<(bit_position + i)
+        }
+        return (register & mask)>>bit_position;
+    }
+
     pub fn check_ports_for_device(& self){
         for current_port in &self.ports{
             let ssts = current_port.sataStatus;
@@ -343,8 +359,29 @@ impl AhciController {
         if handoff == 0{
             info!("the bios has no control over the hba, so the os can use it");
         }
+    }
 
+    pub fn check_64_bit_addr_supported(&self){
+        let cap = self.hba_regs.hostCapabilities;
+        let output = Self::general_bit_check(cap, 31);
+        if output{
+            info!("es werden 64 bit adressen unterstützt");
+        }else{
+            info!("es werden 32 bit adressen unterstützt");
+        }
 
+    }
+
+    pub fn check_cap_nr_of_ports(&self){
+        let cap = self.hba_regs.hostCapabilities;
+        let nr_of_ports = Self::general_bitlen_reader(cap, 0, 5);
+        info!("laut capabilities werden {} Ports unterstützt.", nr_of_ports);
+    }
+
+    pub fn check_nr_of_command_slots(&self){
+        let cap = self.hba_regs.hostCapabilities;
+        let nr_of_ports = Self::general_bitlen_reader(cap, 8, 5);
+        info!("laut capabilities werden {} Command slots unterstützt.", nr_of_ports);
     }
 
 
@@ -353,6 +390,7 @@ impl AhciController {
 // Todo:
 //Erkennung der verschiedenen Geräte (ata und atapi)
 //Command header impl
+//Comand Liste anschauen (es werden 31 command slots unterstützt)
 
 
 
