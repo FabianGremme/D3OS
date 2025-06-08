@@ -73,6 +73,34 @@ struct HbaPort {
      vendorSpecific: [u32;4],
 
 }
+/*
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+struct HbaCommandHeader {
+    // DWORD 0
+    uint8_t commandFisLength: 5;
+    uint8_t atapi: 1;
+    uint8_t write: 1;
+    uint8_t prefetchable: 1;
+
+    uint8_t reset: 1;
+    uint8_t bist: 1;
+    uint8_t clearBusyOnOK: 1;
+    uint8_t reserved1: 1;
+    uint8_t portMultiplierPort: 4;
+
+     physicalRegionDescriptorTableLength: u16,
+
+    // DWORD 1
+    physicalRegionDescriptorByteCount: u32,
+
+    // DWORD 2-3
+    commandTableDescriptorBaseAddress: u32,
+    commandTableDescriptorBaseAddressUpper: u32,
+
+    // DWORD 4-7
+    reserved: [u32;4],
+}*/
 
 pub fn init(){
     info!("searching the bus for mass storage devices that use sata");
@@ -252,10 +280,12 @@ impl AhciController {
             ports:Self::init_ports(ahci_base_addr,hba.portsImplemented)
         }
 
-        // Todo:
-        //bios Handoff implementieren
 
+    }
 
+    pub fn general_bit_check(register: u32, bit_position: u8)->bool{
+        let mask = 1<<bit_position;
+        return register & mask != 0;
     }
 
     pub fn check_ports_for_device(& self){
@@ -279,8 +309,8 @@ impl AhciController {
 
     pub fn check_ahci_mode_enabled(&self){
         let ghc = self.hba_regs.globalHostControl;
-        let help = 1 <<31;
-        if ghc & help != 0{
+        let output = Self::general_bit_check(ghc, 31);
+        if output{
             info!("der Controller läuft im ahci modus");
         }else{
             info!("der Controller läuft nicht im ahci modus");
@@ -289,8 +319,8 @@ impl AhciController {
 
     pub fn check_only_ahci(&self){
         let sam = self.hba_regs.hostCapabilities;
-        let help = 1 <<18;
-        if sam & help != 0{
+        let output = Self::general_bit_check(sam, 18);
+        if output{
             info!("der Controller unterstützt nur ahci");
         }else{
             info!("der Controller unterstützt nicht nur ahci");
@@ -316,7 +346,13 @@ impl AhciController {
 
 
     }
+
+
 }
+
+// Todo:
+//Erkennung der verschiedenen Geräte (ata und atapi)
+//Command header impl
 
 
 
