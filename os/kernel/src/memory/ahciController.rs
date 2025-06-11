@@ -102,6 +102,27 @@ struct HbaCommandHeader {
     reserved: [u32;4],
 }*/
 
+
+#[repr(C, packed)]
+#[derive(Debug, Clone, Copy)]
+struct HbaCommandHeader {
+    // DWORD 0
+    cmd_ctrl: u8,
+    cmd_ctrl2: u8,
+    physicalRegionDescriptorTableLength: u16,
+
+    // DWORD 1
+    physicalRegionDescriptorByteCount: u32,
+
+    // DWORD 2-3
+    commandTableDescriptorBaseAddress: u32,
+    commandTableDescriptorBaseAddressUpper: u32,
+
+    // DWORD 4-7
+    reserved: [u32;4],
+}
+
+
 pub fn init(){
     info!("searching the bus for mass storage devices that use sata");
     let mut found_devices = pci_bus().search_by_class(MASS_STORAGE_DEVICE as BaseClass, SATA_CONTROLLER as SubClass);
@@ -117,6 +138,7 @@ pub fn init(){
         ahci_controller.check_64_bit_addr_supported();
         ahci_controller.check_cap_nr_of_ports();
         ahci_controller.check_nr_of_command_slots();
+        ahci_controller.map_command_components();
 
         //info!("teste die Funktion um mehrere Bitfelder auszulesen");
         //let testoutput = ahci_controller.general_bitlen_reader(57105, 7, 5); // hier sollte 30 rauskommen, das passt
@@ -258,6 +280,19 @@ impl AhciController {
         //map the memory where the control registers are located
         let address = bar_mem.0 as u64;
         let length = bar_mem.1 as u64;
+        Self::map_general(bar_mem.0 as u64, bar_mem.1 as u64, "ahci");
+        let hba = Self::fill_hba_reg(ahci_base_addr);
+
+        Self{
+            hba_regs: hba,
+            ports:Self::init_ports(ahci_base_addr,hba.portsImplemented)
+        }
+
+
+
+    }
+
+    pub unsafe fn map_general(address: u64, length: u64, tag: &str){
         info!(
                 "(Address: [0x{:x}], Length: [{} B])",
                 address,
@@ -279,16 +314,8 @@ impl AhciController {
                 MemorySpace::Kernel,
                 PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
                 VmaType::DeviceMemory,
-                "ahci",
+                tag,
             );
-        let hba = Self::fill_hba_reg(ahci_base_addr);
-
-        Self{
-            hba_regs: hba,
-            ports:Self::init_ports(ahci_base_addr,hba.portsImplemented)
-        }
-
-
     }
 
     pub fn general_bit_check(register: u32, bit_position: u8)->bool{
@@ -306,21 +333,28 @@ impl AhciController {
 
     pub fn check_ports_for_device(& self){
         for current_port in &self.ports{
-            let ssts = current_port.sataStatus;
-            let ipm = (ssts >> 8) & 0x0F;
-            let det = ssts & 0x0F;
+            if Self::check_port_usable(current_port.clone()){
+                let signature = current_port.signature;
+                info!("the device signature is {}", signature);
+            }
 
-            if ipm != 0x01 {    //0x01 means that the interface of the device is active. only then the device can be accessed
-                info!("ERR: interface is not active");
-                return;
-            }
-            if det != 0x03 {    //0x03 means that the device is detected and a physical communication is established
-                info!("ERR: device is not detected, or physical communication not established");
-                return;
-            }
-            let signature = current_port.signature;
-            info!("the device signature is {}", signature);
         }
+    }
+
+    pub fn check_port_usable(port:HbaPort)-> bool{
+        let ssts = port.sataStatus;
+        let ipm = (ssts >> 8) & 0x0F;
+        let det = ssts & 0x0F;
+
+        if ipm != 0x01 {    //0x01 means that the interface of the device is active. only then the device can be accessed
+            //info!("ERR: interface is not active");
+            return false;
+        }
+        if det != 0x03 {    //0x03 means that the device is detected and a physical communication is established
+            //info!("ERR: device is not detected, or physical communication not established");
+            return false;
+        }
+        true
     }
 
     pub fn check_ahci_mode_enabled(&self){
@@ -380,17 +414,38 @@ impl AhciController {
 
     pub fn check_nr_of_command_slots(&self){
         let cap = self.hba_regs.hostCapabilities;
-        let nr_of_ports = Self::general_bitlen_reader(cap, 8, 5);
-        info!("laut capabilities werden {} Command slots unterstützt.", nr_of_ports);
+        let nr_of_cmds = Self::general_bitlen_reader(cap, 8, 5);
+        info!("laut capabilities werden {} Command slots unterstützt.", nr_of_cmds);
+    }
+
+    pub fn map_command_components(&self){
+        //der Port muss noch zurückgesetzt werden, aber das kommt noch
+        for port in &self.ports{
+            if Self::check_port_usable(port.clone()){
+                self.map_command_for_port(*port);
+            }
+
+        }
+
+    }
+
+    pub fn map_command_for_port(&self, port: HbaPort){
+        //baue die Adresse für die 32 cmd header
+        let cmd_header_addr:u64 = port.commandListBaseAddress as u64 | ((port.commandListBaseAddressUpper as u64) << 32);
+
+        //baue die Adresse für die received FIS
+        let received_fis: u64 = port.fisBaseAddress as u64 | ((port.fisBaseAddressUpper as u64) << 32);
+        info!("die Addressen sind: cmd_header: {:x}, received_fis: {:x}", cmd_header_addr, received_fis);
     }
 
 
 }
 
 // Todo:
-//Erkennung der verschiedenen Geräte (ata und atapi)
+//Erkennung der verschiedenen Geräte (ata und atapi) (Signaturen müssen nur noch gematched werden)
 //Command header impl
 //Comand Liste anschauen (es werden 31 command slots unterstützt)
+//Reset vom Port impl
 
 
 
