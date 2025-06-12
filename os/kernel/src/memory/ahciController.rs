@@ -278,8 +278,6 @@ impl AhciController {
         let ahci_base_addr = bar_mem.0 as *mut u8;
 
         //map the memory where the control registers are located
-        let address = bar_mem.0 as u64;
-        let length = bar_mem.1 as u64;
         Self::map_general(bar_mem.0 as u64, bar_mem.1 as u64, "ahci");
         let hba = Self::fill_hba_reg(ahci_base_addr);
 
@@ -292,6 +290,8 @@ impl AhciController {
 
     }
 
+
+    //length is in bytes
     pub unsafe fn map_general(address: u64, length: u64, tag: &str){
         info!(
                 "(Address: [0x{:x}], Length: [{} B])",
@@ -432,10 +432,17 @@ impl AhciController {
     pub fn map_command_for_port(&self, port: HbaPort){
         //baue die Adresse für die 32 cmd header
         let cmd_header_addr:u64 = port.commandListBaseAddress as u64 | ((port.commandListBaseAddressUpper as u64) << 32);
+        let size_cmd_header = 1024;
 
         //baue die Adresse für die received FIS
         let received_fis: u64 = port.fisBaseAddress as u64 | ((port.fisBaseAddressUpper as u64) << 32);
+        let size_received_fis = 256;
         info!("die Addressen sind: cmd_header: {:x}, received_fis: {:x}", cmd_header_addr, received_fis);
+        unsafe{
+            Self::map_general(cmd_header_addr, size_cmd_header,"cmd_hd");
+            Self::map_general(received_fis, size_received_fis,"rc_fis");
+        }
+
     }
 
 
@@ -443,10 +450,12 @@ impl AhciController {
 
 // Todo:
 //Erkennung der verschiedenen Geräte (ata und atapi) (Signaturen müssen nur noch gematched werden)
-//Command header impl
-//Comand Liste anschauen (es werden 31 command slots unterstützt)
+//Comand Liste anschauen (es werden 31 command slots unterstützt) (vector of command headers?)
 //Reset vom Port impl
+//command Table als structur festlegen und einmappen
 
+
+//alles mal in ein ganz frisches neues D3OS reinkopieren (bis Freitag fertig)
 
 
 
