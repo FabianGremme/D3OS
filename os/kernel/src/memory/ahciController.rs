@@ -438,9 +438,30 @@ impl AhciController {
         let received_fis: u64 = port.fisBaseAddress as u64 | ((port.fisBaseAddressUpper as u64) << 32);
         let size_received_fis = 256;
         info!("die Addressen sind: cmd_header: {:x}, received_fis: {:x}", cmd_header_addr, received_fis);
-        unsafe{
-            Self::map_general(cmd_header_addr, size_cmd_header,"cmd_hd");
-            Self::map_general(received_fis, size_received_fis,"rc_fis");
+        unsafe {
+            Self::map_general(cmd_header_addr, size_cmd_header, "cmd_hd");
+            Self::map_general(received_fis, size_received_fis, "rc_fis");
+
+
+            //test if there is actual memory
+            let start = cmd_header_addr as *mut u8;
+            let dword1 = start as *mut u32;
+            let mut offset = 4;
+            let dword2 = start.offset(offset) as *mut u32;
+            offset += 4;
+            let dword3 = start.offset(offset) as *mut u32;
+            offset += 4;
+            let dword4 = start.offset(offset) as *mut u32;
+            offset += 4;
+            let dword5 = start.offset(offset) as *mut u32;
+            offset += 4;
+            let dword6 = start.offset(offset) as *mut u32;
+            offset += 4;
+            let dword7 = start.offset(offset) as *mut u32;
+
+            info!("dword1 = {:?}, dword2 = {:?}, dword3 = {:?}, dword4 = {:?}, dword5 = {:?}, dword6 = {:?}, dword7 = {:?}"
+                , dword1.read(), dword2.read(), dword3.read(), dword4.read(), dword5.read(), dword6.read(), dword7.read());
+
         }
 
     }
@@ -454,8 +475,9 @@ impl AhciController {
 //Reset vom Port impl
 //command Table als structur festlegen und einmappen
 
+//tock registers (anschauen)
 
-//alles mal in ein ganz frisches neues D3OS reinkopieren (bis Freitag fertig)
+//alles mal in ein ganz frisches neues D3OS reinkopieren (übers Wochenende fertig)
 
 
 
