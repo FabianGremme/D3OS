@@ -263,6 +263,48 @@ impl AhciController {
         output
     }
 
+    unsafe fn fill_cmd_header(start: *mut u8) ->HbaCommandHeader{
+        let dword0 = start as *mut u32;
+        let mut offset = 4;
+        let dword1 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword2 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword3 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword4 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword5 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword6 = start.offset(offset) as *mut u32;
+        offset += 4;
+        let dword7 = start.offset(offset) as *mut u32;
+
+        info!("dword0 = {:?}, dword1 = {:?}, dword2 = {:?}, dword3 = {:?}, dword4 = {:?}, dword5 = {:?}, dword6 = {:?}, dword7 = {:?}"
+                ,dword0.read(), dword1.read(), dword2.read(), dword3.read(), dword4.read(), dword5.read(), dword6.read(), dword7.read());
+        let phys_table_len = (dword0.read() >> 16) as u16;
+        let cmd = dword0.read() as u16;
+        let cmd1 = (cmd >> 8) as u8;
+        let cmd2 = dword0.read()  as u8;
+
+        HbaCommandHeader{
+            // DWORD 0
+            cmd_ctrl: cmd2,
+            cmd_ctrl2: cmd1,
+            physicalRegionDescriptorTableLength: phys_table_len,
+
+            // DWORD 1
+            physicalRegionDescriptorByteCount: dword1.read(),
+
+            // DWORD 2-3
+            commandTableDescriptorBaseAddress: dword2.read(),
+            commandTableDescriptorBaseAddressUpper: dword3.read(),
+
+            // DWORD 4-7
+            reserved: [dword4.read(), dword5.read(), dword6.read(), dword7.read()],
+        }
+    }
+
     unsafe fn new(device: &RwLock<EndpointHeader>) -> Self {
         let device_header = device.read();
 
@@ -444,23 +486,10 @@ impl AhciController {
 
 
             //test if there is actual memory
-            let start = cmd_header_addr as *mut u8;
-            let dword1 = start as *mut u32;
-            let mut offset = 4;
-            let dword2 = start.offset(offset) as *mut u32;
-            offset += 4;
-            let dword3 = start.offset(offset) as *mut u32;
-            offset += 4;
-            let dword4 = start.offset(offset) as *mut u32;
-            offset += 4;
-            let dword5 = start.offset(offset) as *mut u32;
-            offset += 4;
-            let dword6 = start.offset(offset) as *mut u32;
-            offset += 4;
-            let dword7 = start.offset(offset) as *mut u32;
+            let cmd_header1 = Self::fill_cmd_header(cmd_header_addr as *mut u8);
+            let cmd_header2 = Self::fill_cmd_header((cmd_header_addr + 8*32) as *mut u8);
+            let cmd_header3 = Self::fill_cmd_header((cmd_header_addr + 16*32) as *mut u8);
 
-            info!("dword1 = {:?}, dword2 = {:?}, dword3 = {:?}, dword4 = {:?}, dword5 = {:?}, dword6 = {:?}, dword7 = {:?}"
-                , dword1.read(), dword2.read(), dword3.read(), dword4.read(), dword5.read(), dword6.read(), dword7.read());
 
         }
 
