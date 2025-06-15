@@ -490,6 +490,9 @@ impl AhciController {
             let cmd_header2 = Self::fill_cmd_header((cmd_header_addr + 8*32) as *mut u8);
             let cmd_header3 = Self::fill_cmd_header((cmd_header_addr + 16*32) as *mut u8);
 
+            //map the first command table with the info of the command header
+            let cmd_table_addr = cmd_header1.commandTableDescriptorBaseAddress as u64 | ((cmd_header1.commandTableDescriptorBaseAddressUpper as u64)<<32);
+            info!("the cmd_table_addr is {:x}", cmd_table_addr);
 
         }
 
@@ -500,7 +503,7 @@ impl AhciController {
 
 // Todo:
 //Erkennung der verschiedenen Geräte (ata und atapi) (Signaturen müssen nur noch gematched werden)
-//Comand Liste anschauen (es werden 31 command slots unterstützt) (vector of command headers?)
+//Comand Liste anschauen (es werden 31 command slots unterstützt) (es wird kein weiterer gefunden)
 //Reset vom Port impl
 //command Table als structur festlegen und einmappen
 
